@@ -1,0 +1,7 @@
+*
+!src
+!pom.xml
+!.mvn
+!mvnw
+
+**/.DS_Store
