@@ -66,13 +66,15 @@ jobs:
       # Le runner démarre sur une machine VIDE.
       # Sans cette étape, il n'y a pas de code.
       - name: Récupérer le code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
 
       # Le JDK présent par défaut sur le runner n'est garanti ni
       # en version ni en distribution. On l'installe explicitement,
       # même logique que l'épinglage d'une image Docker.
       - name: Installer Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
         with:
           distribution: temurin
           java-version: '21'
@@ -96,7 +98,7 @@ jobs:
       # bien — c'est-à-dire quand ils ne servent à rien.
       - name: Publier les rapports de test
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           # Ce nom apparaîtra dans une liste, à côté du SBOM et du
           # rapport Trivy. "app" ne dirait rien dans six mois.
