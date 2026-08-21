@@ -1,0 +1,105 @@
+# ============================================================
+#  Intégration continue — Order Management API
+#
+#  Ce fichier est le squelette de toute la chaîne DevSecOps.
+#  Parties 7 à 16 : chaque outil viendra s'y greffer.
+#  Emplacement obligatoire : .github/workflows/
+# ============================================================
+name: CI
+
+# ---------- QUAND ce workflow s'exécute ----------
+on:
+  # Après fusion : le résultat d'un merge n'est pas identique
+  # à la branche testée. Deux PR vertes séparément peuvent
+  # casser main une fois réunies.
+  push:
+    branches:
+      - main
+
+  # Avant fusion, sur toutes les PR.
+  # JAMAIS pull_request_target : celui-ci exécuterait le workflow
+  # avec nos secrets et un jeton en écriture, sur du code proposé
+  # par n'importe qui. C'est un trou de sécurité connu.
+  pull_request:
+
+# ---------- CE QUE le workflow a le droit de faire ----------
+# GitHub injecte un GITHUB_TOKEN dans chaque job. Par défaut il
+# peut ÉCRIRE : pousser des commits, créer des releases.
+# Ici on ne fait que lire du code. Si une action tierce était
+# compromise, elle ne pourrait rien écrire.
+# Principe du moindre privilège : on élargira ligne par ligne,
+# seulement quand un outil en aura réellement besoin.
+permissions:
+  contents: read
+
+# ---------- Éviter les exécutions inutiles ----------
+# Trois push en cinq minutes = seul le dernier commit compte.
+# Les exécutions précédentes sur la MÊME référence sont annulées.
+# Bénéfice caché : la coche verte correspond toujours au dernier
+# état, jamais à un commit intermédiaire.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ============================================================
+#  jobs = DICTIONNAIRE : chaque clé est un identifiant de job.
+#  Cet identifiant sert à écrire "needs: build" quand un autre
+#  job devra attendre celui-ci (dès la partie 10).
+#  Un élément de liste n'a pas de nom : on ne pourrait pas le
+#  référencer. D'où un dictionnaire ici, et une liste pour steps.
+# ============================================================
+jobs:
+  build:
+    name: Compilation et tests
+
+    # Version épinglée plutôt que ubuntu-latest, qui bouge sans
+    # préavis. Contrepartie : une version de runner finit par être
+    # retirée — c'est un engagement de maintenance, pas une
+    # garantie éternelle.
+    # Ces runners ont un démon Docker opérationnel : les tests
+    # Testcontainers y tournent sans configuration.
+    runs-on: ubuntu-22.04
+
+    # steps = LISTE ordonnée. Ils s'exécutent de haut en bas,
+    # et un échec interrompt les suivants (sauf if: always()).
+    steps:
+      # Le runner démarre sur une machine VIDE.
+      # Sans cette étape, il n'y a pas de code.
+      - name: Récupérer le code
+        uses: actions/checkout@v5
+
+      # Le JDK présent par défaut sur le runner n'est garanti ni
+      # en version ni en distribution. On l'installe explicitement,
+      # même logique que l'épinglage d'une image Docker.
+      - name: Installer Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          # Conserve ~/.m2 entre les exécutions, indexé sur
+          # l'empreinte du pom.xml. Même principe que l'ordre des
+          # COPY dans le Dockerfile : ce qui change rarement est
+          # mis en cache séparément.
+          cache: maven
+
+      # -B : mode batch, pas de barres de progression -> logs lisibles
+      # verify : enchaîne compile -> test -> package
+      #          On vérifie d'un coup la compilation, les 44 tests
+      #          et la construction du jar.
+      - name: Compiler et tester
+        run: ./mvnw -B verify
+
+      # if: always() est indispensable ici.
+      # Par défaut une étape est SAUTÉE si une précédente a échoué.
+      # Or c'est justement quand les tests cassent qu'on veut les
+      # rapports. Sans always(), on ne les aurait que quand tout va
+      # bien — c'est-à-dire quand ils ne servent à rien.
+      - name: Publier les rapports de test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Ce nom apparaîtra dans une liste, à côté du SBOM et du
+          # rapport Trivy. "app" ne dirait rien dans six mois.
+          name: rapports-tests
+          path: target/surefire-reports/
+          retention-days: 7

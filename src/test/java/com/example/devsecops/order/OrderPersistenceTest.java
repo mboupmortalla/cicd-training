@@ -19,24 +19,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-//@SpringBootTest
-//@Testcontainers
-//@Sql("/db/reset-catalogue.sql")
 public class OrderPersistenceTest extends AbstractIntegrationTest {
-    // a mettre sur le abstract
-//    @Container
-//    @ServiceConnection
-//    static PostgreSQLContainer postgreSQLContainer = new PostgreSQLContainer("postgres:18-alpine");
 
-    /*
-    * au lieu d'utiliser ServiceConnection on peut mettre:
-    * @DynamicPropertySource
-static void datasource(DynamicPropertyRegistry registry) {
-    registry.add("spring.datasource.url", postgres::getJdbcUrl);
-    registry.add("spring.datasource.username", postgres::getUsername);
-    registry.add("spring.datasource.password", postgres::getPassword);
-}
-* */
 
 
     @Autowired
