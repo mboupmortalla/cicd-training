@@ -49,7 +49,19 @@ concurrency:
 #  référencer. D'où un dictionnaire ici, et une liste pour steps.
 # ============================================================
 jobs:
+  secret:
+    name: scan secrets on the source code
+    runs-on: ubuntu-22.04
+    steps:
+      - name: get historical code
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: '0'
+          persist-credentials: 'false'
+      - name: lint secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # ratchet:gitleaks/gitleaks-action@v3
   build:
+    needs: secret
     name: Compilation et tests
 
     # Version épinglée plutôt que ubuntu-latest, qui bouge sans
