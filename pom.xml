@@ -68,7 +68,12 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-
+		<dependency>
+			<groupId>org.jacoco</groupId>
+			<artifactId>jacoco-maven-plugin</artifactId>
+			<version>0.8.15</version>
+			<scope>compile</scope>
+		</dependency>
 		<!-- Testcontainers : une vraie base PostgreSQL jetable pendant les tests -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
