@@ -1,0 +1,15 @@
+services:
+  sonarqube:
+    container_name: sonar-qube
+    image: sonarqube:26.8.0.126808-community@sha256:9026624a61cd25542a402a9e7213dd7dbb39724ac9597e331e6b85362558c079
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonar_data:/opt/sonarqube/data
+      - sonar_extensions:/opt/sonarqube/extensions
+      - sonar_logs:/opt/sonarqube/logs
+
+volumes:
+  sonar_data:
+  sonar_extensions:
+  sonar_logs:
