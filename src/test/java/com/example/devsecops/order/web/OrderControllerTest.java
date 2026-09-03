@@ -7,6 +7,7 @@ import com.example.devsecops.order.exception.OrderNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -154,5 +155,17 @@ class OrderControllerTest {
         mockMvc.perform(
                 post("/api/v1/orders/" + orderId+"/confirm")
         ).andExpect(status().is(409));
+    }
+
+    @Test
+    void une_modification_concurrente_renvoie_409() throws Exception {
+        UUID orderId = UUID.randomUUID();
+
+        when(orderService.confirm(orderId))
+                .thenThrow(new OptimisticLockingFailureException(
+                        "Row was updated by another transaction"));
+
+        mockMvc.perform(post("/api/v1/orders/" + orderId + "/confirm"))
+                .andExpect(status().isConflict());
     }
 }
