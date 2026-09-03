@@ -4,6 +4,7 @@ import com.example.devsecops.order.OrderService;
 import com.example.devsecops.order.domain.InvalidOrderTransitionException;
 import com.example.devsecops.order.domain.OrderStatus;
 import com.example.devsecops.order.exception.OrderNotFoundException;
+import com.example.devsecops.order.exception.UnknownProductException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -22,9 +23,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.testcontainers.shaded.org.hamcrest.Matchers.containsString;
+import static org.testcontainers.shaded.org.hamcrest.Matchers.not;
 
 /**
  * Test de TRANCHE : Spring demarre la couche web et rien d'autre.
@@ -167,5 +168,37 @@ class OrderControllerTest {
 
         mockMvc.perform(post("/api/v1/orders/" + orderId + "/confirm"))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void un_produit_inconnu_renvoie_400() throws Exception {
+        when(orderService.create(any()))
+                .thenThrow(new UnknownProductException("Unknown product(s): [1111]"));
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CORPS_VALIDE))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void un_invariant_de_domaine_viole_renvoie_400() throws Exception {
+        when(orderService.create(any()))
+                .thenThrow(new IllegalArgumentException("quantity must be greater than 0"));
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CORPS_VALIDE))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void une_erreur_inattendue_renvoie_500_sans_fuite() throws Exception {
+        when(orderService.findById(any()))
+                .thenThrow(new RuntimeException("connexion perdue vers la base"));
+
+        mockMvc.perform(get("/api/v1/orders/" + UUID.randomUUID()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().string(not(containsString("connexion perdue")).toString()));
     }
 }
