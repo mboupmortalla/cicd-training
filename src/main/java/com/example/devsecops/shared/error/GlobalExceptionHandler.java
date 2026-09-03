@@ -32,7 +32,7 @@ import java.util.Map;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
-
+    private static final String INVALID_REQUEST = "Invalid request";
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     // ---------- 409 : conflit d'etat ----------
@@ -71,7 +71,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handleUnknownProduct(UnknownProductException exception) {
         log.info("Unknown product referenced: {}", exception.getMessage());
         return problem(HttpStatus.BAD_REQUEST,
-                "Invalid request",
+                INVALID_REQUEST,
                 "One or more products in this order do not exist");
     }
 
@@ -79,7 +79,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException exception) {
         log.warn("Domain invariant violated: {}", exception.getMessage());
-        return problem(HttpStatus.BAD_REQUEST, "Invalid request", "The request is not valid");
+        return problem(HttpStatus.BAD_REQUEST, INVALID_REQUEST, "The request is not valid");
     }
 
     /**
@@ -97,7 +97,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .toList();
 
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST,
-                "Invalid request", "Request validation failed");
+                INVALID_REQUEST, "Request validation failed");
         problem.setProperty("errors", errors);
 
         return ResponseEntity.badRequest().body(problem);
