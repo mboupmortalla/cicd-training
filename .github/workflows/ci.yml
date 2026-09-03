@@ -77,6 +77,8 @@ jobs:
     # Ces runners ont un démon Docker opérationnel : les tests
     # Testcontainers y tournent sans configuration.
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
 
     # steps = LISTE ordonnée. Ils s'exécutent de haut en bas,
     # et un échec interrompt les suivants (sauf if: always()).
@@ -111,8 +113,8 @@ jobs:
           ./mvnw -B verify
           org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar
           -Dsonar.host.url=https://sonarcloud.io
-          -Dsonar.organization=kingm221
-          -Dsonar.projectKey=devsecopstestci
+          -Dsonar.organization=devsecopstestci
+          -Dsonar.projectKey=mboupmortalla_cicd-training
           -Dsonar.qualitygate.wait=true
         env:
           # Seul secret de l'étape. Les trois paramètres ci-dessus sont publics.
