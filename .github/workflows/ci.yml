@@ -65,44 +65,6 @@ jobs:
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # ratchet:gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  sonar:
-    name: Analyse statique du code
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Récupérer le code
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # ratchet:actions/checkout@v5.1.0
-        with:
-          persist-credentials: false
-          # Sonar lit l'historique git (blame) pour distinguer le code neuf.
-          # Avec un clone superficiel : "Shallow clone detected", attribution faussée.
-          fetch-depth: 0
-
-      - name: Installer Java 21
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # ratchet:actions/setup-java@v5.7.0
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-
-      - name: Analyser et attendre la Quality Gate
-        run: >
-          ./mvnw -B verify
-          org.sonarsource.scanner.maven:sonar-maven-plugin:5.1.0.4751:sonar
-          -Dsonar.host.url=https://sonarcloud.io
-          -Dsonar.organization=kingm221
-          -Dsonar.projectKey=devsecopstestci
-          -Dsonar.qualitygate.wait=true
-        env:
-          # Seul secret de l'étape. Les trois paramètres ci-dessus sont publics.
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-      - name: Publier le rapport de scan
-        if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # ratchet:actions/upload-artifact@v5.0.0
-        with:
-          name: rapports-scan
-          path: target/sonar/
-          retention-days: 7
 
   build:
     needs: secret
@@ -145,7 +107,17 @@ jobs:
       #          On vérifie d'un coup la compilation, les 44 tests
       #          et la construction du jar.
       - name: Compiler et tester
-        run: ./mvnw -B verify
+        run: >
+          ./mvnw -B verify
+          org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar
+          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.organization=kingm221
+          -Dsonar.projectKey=devsecopstestci
+          -Dsonar.qualitygate.wait=true
+        env:
+          # Seul secret de l'étape. Les trois paramètres ci-dessus sont publics.
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
 
       # if: always() est indispensable ici.
       # Par défaut une étape est SAUTÉE si une précédente a échoué.
@@ -159,7 +131,9 @@ jobs:
           # Ce nom apparaîtra dans une liste, à côté du SBOM et du
           # rapport Trivy. "app" ne dirait rien dans six mois.
           name: rapports-tests
-          path: target/surefire-reports/
+          path: |
+            target/surefire-reports/
+            target/site/jacoco/
           retention-days: 7
 
   image:
