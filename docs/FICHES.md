@@ -1,6 +1,6 @@
 # Fiches DevSecOps — recettes réutilisables
 
-*Parties 1 à 7 du parcours. Chaque fiche est écrite pour être appliquée à
+*Parties 1 à 8 du parcours. Chaque fiche est écrite pour être appliquée à
 n'importe quel projet, pas seulement à celui-ci.*
 
 ---
@@ -17,6 +17,7 @@ n'importe quel projet, pas seulement à celui-ci.*
 | **5** | Dockerfile de production | multi-stage, non-root, healthcheck, `.dockerignore` |
 | **6** | Pipeline GitHub Actions | structure, moindre privilège, épinglage, cache |
 | **7** | Gitleaks | règles et entropie, `fetch-depth`, prouver que ça marche |
+| **8** | SonarQube | couverture, Quality Gate, triage, périmètre d'un outil |
 | — | Annexe | commandes de référence |
 
 **Comment lire ces fiches** — chacune suit le même plan : *quand l'appliquer*,
@@ -60,13 +61,21 @@ La seule protection est de **ne jamais faire entrer** ce qui ne doit pas y être
 ### 3. Une option mal orthographiée est silencieusement ignorée
 
 ```
--DskipsTests          Maven crée une propriété que personne ne lit
-type: gha             entrée inconnue d'une action → ignorée
-fetch-depth: 1        (défaut) → un seul commit → rien à scanner
+-DskipsTests              Maven crée une propriété que personne ne lit
+type: gha                 entrée inconnue d'une action → ignorée
+fetch-depth: 1            (défaut) → un seul commit → rien à scanner
+pas de JaCoCo             SonarQube affiche 0 % de couverture, sans erreur
+pas de qualitygate.wait   la gate rougit sur le serveur, le build reste vert
+secret d'environnement    ${{ secrets.X }} vaut "" si le job ne déclare pas environment:
+push: false sans load     l'image est construite mais invisible du démon Docker
 ```
 
 **Rien ne casse. Tout est vert. La vérification n'a pas eu lieu.**
 C'est le mode d'échec le plus dangereux d'un pipeline.
+
+Symétrique et tout aussi trompeur : **un job rouge ne prouve pas qu'un outil
+fonctionne** — il peut échouer *avant* d'avoir vérifié quoi que ce soit.
+La seule preuve est le rapport qui nomme la règle, le fichier et la ligne.
 
 ### 4. Un contrôle qui n'a jamais rien trouvé n'est pas un contrôle
 
@@ -718,6 +727,165 @@ différents.
 
 ---
 
+# Fiche 8 · SonarQube — analyse statique et Quality Gate
+
+**Quand** : dès qu'un pipeline existe. C'est le premier outil qui juge le code
+lui-même, et le premier qui peut *bloquer* une fusion.
+
+### Ce qu'il fait, et surtout ce qu'il ne fait pas
+
+Il lit le code **sans l'exécuter** et reconnaît des motifs dangereux ou fragiles.
+
+| | |
+|---|---|
+| **Bug** | ça va casser : NPE probable, condition toujours fausse, ressource non fermée |
+| **Vulnerability** | exploitable : injection, crypto faible, chemin construit depuis une entrée |
+| **Code smell** | ça marche, mais c'est coûteux à maintenir |
+| **Security hotspot** | **pas une faille** : un endroit qui mérite un examen humain |
+
+La distinction hotspot / vulnerability est celle que tout le monde confond.
+Un générateur aléatoire non sécurisé est une faille s'il produit un jeton de
+session, et inoffensif s'il choisit une couleur. **Sonar ne connaît pas le
+contexte : il pose la question au lieu de trancher.**
+
+**Il ne mesure pas la couverture.** Il n'exécute aucun test — il *lit* un
+rapport produit par un autre outil (JaCoCo pour Java). Sans ce rapport, il
+affiche 0 % sans le moindre message d'erreur.
+
+```
+JaCoCo → target/site/jacoco/jacoco.xml → SonarQube le lit
+```
+
+### Le périmètre — à connaître avant de faire confiance à un « A »
+
+L'édition Community ne fait **pas** d'analyse de flux de données : les
+injections SQL et XSS sont hors de sa portée. Un `Security : A` signifie
+*« rien trouvé par les règles que cette édition exécute »*.
+
+C'est le fond du sujet, et il vaut pour tous les outils du pipeline :
+
+```
+Sonar               le code que tu écris
+Dependency-Check    les bibliothèques que tu utilises
+Trivy               l'image et le système qui la porte
+ZAP                 l'application qui tourne, vue du dehors
+```
+
+Ce n'est pas de la redondance. **Quatre projecteurs orientés différemment.**
+
+### La recette
+
+**1 · JaCoCo dans le `pom.xml`** — deux exécutions :
+
+| | |
+|---|---|
+| `prepare-agent` | attache l'agent à la JVM des tests. Se lie seul à `initialize` |
+| `report` | produit le XML. À lier à **`verify`**, donc après les tests |
+
+⚠️ `prepare-agent` remplit la propriété `argLine`, que Surefire consomme.
+**Si tu définis toi-même un `<argLine>` dans Surefire, tu écrases celui de
+JaCoCo** et la couverture retombe à 0 %, en silence. Pour cumuler, utilise
+l'évaluation tardive : `<argLine>@{argLine} -javaagent:…</argLine>`.
+
+**2 · Un serveur qui survit entre deux builds.** SonarQube est un outil **avec
+état** : sa Quality Gate juge le *code nouveau*, ce qui suppose la mémoire des
+analyses précédentes. Un conteneur éphémère détruit à chaque build n'a aucune
+mémoire — et la notion de « code nouveau » disparaît.
+
+Serveur local pour comprendre l'outil (n'oublie pas les **volumes** :
+`data`, `extensions`, `logs`), service hébergé pour la CI.
+
+**3 · La définition du code nouveau** — `reference branch = main` dans un flux
+par pull requests. Une gate qui juge le mauvais périmètre est inutile.
+
+**4 · La Quality Gate** — la gate par défaut exige, **sur le code neuf** :
+
+```
+0 issue · hotspots revus · couverture ≥ 80 % · duplication ≤ 3 %
+```
+
+*Clean as you code* : on n'exige pas de réparer dix ans de dette, on exige que
+l'ajout soit propre. Une gate qui jugerait le projet entier serait rouge dès le
+premier jour, et désactivée dans la semaine.
+
+**Ne l'affaiblis jamais pour faire passer un build.** Une gate qu'on abaisse
+n'enregistre plus que le niveau d'exigence auquel on a renoncé.
+
+**5 · Lui donner autorité** :
+
+```
+-Dsonar.qualitygate.wait=true
+```
+
+Sans ce drapeau, le scanner envoie l'analyse et rend la main avec un code de
+sortie 0. La gate rougit sur le serveur, ton pipeline continue. **Un extincteur
+dans un placard fermé à clé.**
+
+**6 · Dans la CI** — `fetch-depth: 0` (Sonar utilise `git blame` pour
+distinguer le code neuf), `verify` **avant** le goal `sonar`, et le jeton en
+secret **de dépôt**.
+
+### Les pièges
+
+| | |
+|---|---|
+| Secret d'**environnement** | invisible d'un job qui ne déclare pas `environment:` → `${{ secrets.X }}` vaut `""`, sans erreur |
+| Analyse automatique | le service hébergé propose de scanner depuis le dépôt, sans CI. Elle **n'exécute pas les tests** (donc 0 % de couverture) et **entre en conflit** avec l'analyse de CI. À désactiver |
+| Nom ≠ clé | le fil d'Ariane affiche des noms d'affichage ; l'API veut des **clés**. On les lit dans l'URL |
+| Couverture sur petit diff | 5 lignes ajoutées, 0 testée → 0 % → gate bloquée, alors que le projet reste à 78 %. C'est voulu |
+| Note ≠ nombre de problèmes | la note est un **ratio** dette/taille. Un A avec 23 problèmes est normal |
+| Version du scanner | sans version déclarée, Maven prend la dernière disponible. Deux exécutions à un mois d'écart n'utilisent pas le même analyseur |
+
+### Le triage — la vraie compétence
+
+```
+corriger  ·  accepter avec justification  ·  faux positif
+```
+
+**Sonar soulève, tu décides.** Un projet où tout est corrigé aveuglément est
+aussi mal tenu qu'un projet où tout est ignoré : dans les deux cas, personne
+n'a réfléchi.
+
+Trois exemples réels d'un même lot :
+
+| Signalement | Décision |
+|---|---|
+| Littéral dupliqué 3 fois | **corriger** — une faute de frappe sur l'une, rien pour la rattraper |
+| Test sans assertion (`contextLoads`) | **réécrire** — l'assertion existait, elle n'était pas écrite |
+| « Bloc de code commenté » sur un commentaire explicatif citant des annotations | **faux positif** — la règle est heuristique, elle reconnaît une *forme* |
+
+Un problème marqué *Accepted* ne compte pas dans la gate. Le triage n'est pas
+de la paperasse : c'est ce qui rend la règle « 0 issue » vivable.
+
+### Lire une couverture
+
+`77 %` n'est ni bon ni mauvais tant qu'on ne sait pas **ce qui manque**.
+
+| Non couvert | Décision |
+|---|---|
+| `toString()`, getters | laisser. Les tester ne prouverait rien |
+| `equals` / `hashCode` d'entité JPA | tester : sémantique non évidente, un contrat à documenter |
+| Un handler d'exception | tester : c'est un chemin qui ne s'exécute que quand ça va mal |
+| Branche d'un `null`-check défensif inatteignable | laisser. Ne dégrade pas le design pour flatter une métrique |
+
+**Ne cours jamais après 100 %.** Tu finirais par tester des getters.
+
+### La méthode de diagnostic
+
+Quand une authentification échoue en CI, **ne itère pas à l'aveugle** avec des
+cycles de deux minutes. Teste la crédentiale ailleurs :
+
+```bash
+curl -su "$TOKEN:" https://<serveur>/api/authentication/validate
+curl -su "$TOKEN:" "https://<serveur>/api/projects/search?organization=<clé>"
+```
+
+Un client affiche souvent un message volontairement vague — *« non autorisé
+**ou** projet introuvable »* — pour ne rien révéler à un attaquant. **L'API,
+elle, répond précisément.**
+
+---
+
 # Annexe · Commandes de référence
 
 ### Docker
@@ -774,6 +942,41 @@ git checkout <commit> -- <chemin>     # récupère UN fichier, sans les commits
 git log --all --full-history -- .env
 ```
 
+### Couverture et SonarQube
+
+```bash
+# les DEUX fichiers doivent exister après un verify
+ls -l target/jacoco.exec target/site/jacoco/jacoco.xml
+# pas de .exec  -> l'agent n'était pas attaché
+# pas de .xml   -> l'exécution "report" ne s'est pas jouée
+
+# le rapport ligne par ligne, en vert et rouge
+open target/site/jacoco/index.html
+
+# analyse locale
+export SONAR_TOKEN=...
+./mvnw -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:VERSION:sonar \
+  -Dsonar.host.url=... -Dsonar.organization=... -Dsonar.projectKey=... \
+  -Dsonar.qualitygate.wait=true
+
+# tester le jeton HORS du pipeline
+curl -su "$SONAR_TOKEN:" https://<serveur>/api/authentication/validate
+curl -su "$SONAR_TOKEN:" "https://<serveur>/api/projects/search?organization=<clé>"
+```
+
+### Tests
+
+```java
+// voir l'échange HTTP complet d'un test MockMvc
+mockMvc.perform(get(...)).andDo(print()).andExpect(...);
+```
+
+```bash
+# la meilleure mesure de la qualité d'une suite :
+# casser UNE ligne de production et regarder quel test tombe.
+# Si aucun ne tombe, on vient de trouver un trou.
+```
+
 ---
 
-*Fin des fiches — parties 1 à 7.*
+*Fin des fiches — parties 1 à 8.*
