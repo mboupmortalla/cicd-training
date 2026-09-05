@@ -65,6 +65,7 @@ jobs:
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # ratchet:gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
     needs: secret
     name: Compilation et tests
@@ -76,6 +77,8 @@ jobs:
     # Ces runners ont un démon Docker opérationnel : les tests
     # Testcontainers y tournent sans configuration.
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
 
     # steps = LISTE ordonnée. Ils s'exécutent de haut en bas,
     # et un échec interrompt les suivants (sauf if: always()).
@@ -106,7 +109,17 @@ jobs:
       #          On vérifie d'un coup la compilation, les 44 tests
       #          et la construction du jar.
       - name: Compiler et tester
-        run: ./mvnw -B verify
+        run: >
+          ./mvnw -B verify
+          org.sonarsource.scanner.maven:sonar-maven-plugin:5.7.0.6970:sonar
+          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.organization=devsecopstestci
+          -Dsonar.projectKey=mboupmortalla_cicd-training
+          -Dsonar.qualitygate.wait=true
+        env:
+          # Seul secret de l'étape. Les trois paramètres ci-dessus sont publics.
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
 
       # if: always() est indispensable ici.
       # Par défaut une étape est SAUTÉE si une précédente a échoué.
@@ -120,7 +133,9 @@ jobs:
           # Ce nom apparaîtra dans une liste, à côté du SBOM et du
           # rapport Trivy. "app" ne dirait rien dans six mois.
           name: rapports-tests
-          path: target/surefire-reports/
+          path: |
+            target/surefire-reports/
+            target/site/jacoco/
           retention-days: 7
 
   image:
