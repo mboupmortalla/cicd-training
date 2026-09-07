@@ -1,4 +1,6 @@
-# ============================================================
+# je vais faire des tests de verifications
+
+#  ============================================================
 #  Intégration continue — Order Management API
 #
 #  Ce fichier est le squelette de toute la chaîne DevSecOps.
@@ -146,7 +148,7 @@ jobs:
           cache: maven
 
       # -B : mode batch, pas de barres de progression -> logs lisibles
-      # verify : enchaîne compile -> test -> package
+      # verify : enchaîne compile -> test -> package (artefact)
       #          On vérifie d'un coup la compilation, les 44 tests
       #          et la construction du jar.
       - name: Compiler et tester
