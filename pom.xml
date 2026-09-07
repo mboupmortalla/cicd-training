@@ -26,6 +26,9 @@
 
 	<properties>
 		<java.version>21</java.version>
+		<tomcat.version>11.0.25</tomcat.version>
+		<spring-framework.version>7.0.9</spring-framework.version>
+		<postgresql.version>42.7.13</postgresql.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -67,12 +70,6 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.jacoco</groupId>
-			<artifactId>jacoco-maven-plugin</artifactId>
-			<version>0.8.15</version>
-			<scope>compile</scope>
 		</dependency>
 		<!-- Testcontainers : une vraie base PostgreSQL jetable pendant les tests -->
 		<dependency>
@@ -137,6 +134,31 @@
 						</goals>
 					</execution>
 				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.owasp</groupId>
+				<artifactId>dependency-check-maven</artifactId>
+				<version>13.0.0</version>
+
+				<!-- Pas de <executions> : le scan dure plusieurs minutes.
+                     On ne le lie à aucune phase, on l'invoque explicitement. -->
+				<configuration>
+					<!--suppress UnresolvedMavenProperty -->
+					<nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
+
+					<!-- Seuil "High" du barème CVSS.
+                         Par défaut : 11, c'est-à-dire jamais. -->
+					<failBuildOnCVSS>7</failBuildOnCVSS>
+
+					<!-- On ne bloque que sur ce qui est réellement livré. -->
+					<skipTestScope>true</skipTestScope>
+
+					<!-- Liste imbriquée : <formats> contient des <format>. -->
+					<formats>
+						<format>HTML</format>
+						<format>JSON</format>
+					</formats>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
